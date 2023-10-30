@@ -17,13 +17,13 @@ using Bili.Models.BiliBili;
 using Bili.Models.Enums;
 using Bili.Toolkit.Interfaces;
 using Newtonsoft.Json.Linq;
+using QRCoder;
 using Windows.Security.Cryptography.Core;
 using Windows.Storage;
+using Windows.Storage.Streams;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.Web.Http.Filters;
-using ZXing;
-using ZXing.Common;
 using static Bili.Models.App.Constants.ApiConstants;
 using static Bili.Models.App.Constants.ServiceConstants;
 
@@ -229,7 +229,7 @@ namespace Bili.SignIn.Uwp
             return null;
         }
 
-        internal async Task<WriteableBitmap> GetQRImageAsync()
+        internal async Task<BitmapImage> GetQRImageAsync()
         {
             try
             {
@@ -239,22 +239,27 @@ namespace Bili.SignIn.Uwp
                     { Query.LocalId, _guid },
                 };
                 var httpProvider = Locator.Instance.GetService<IHttpProvider>();
-                var request = await httpProvider.GetRequestMessageAsync(HttpMethod.Post, Passport.QRCode, queryParameters);
+                var request = await httpProvider.GetRequestMessageAsync(HttpMethod.Post, Passport.QRCode, queryParameters, RequestClientType.Login);
                 var response = await httpProvider.SendAsync(request);
                 var result = await httpProvider.ParseAsync<ServerResponse<QRInfo>>(response);
 
                 _internalQRAuthCode = result.Data.AuthCode;
-                var barcodeWriter = new BarcodeWriter();
-                barcodeWriter.Format = BarcodeFormat.QR_CODE;
-                barcodeWriter.Options = new EncodingOptions()
+                var generator = new QRCodeGenerator();
+                var data = generator.CreateQrCode(result.Data.Url, QRCodeGenerator.ECCLevel.Q);
+                var code = new BitmapByteQRCode(data);
+                var image = code.GetGraphic(20);
+                using (var stream = new InMemoryRandomAccessStream())
                 {
-                    Margin = 1,
-                    Height = 200,
-                    Width = 200,
-                };
+                    using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))
+                    {
+                        writer.WriteBytes(image);
+                        await writer.StoreAsync();
+                    }
 
-                var img = barcodeWriter.Write(result.Data.Url);
-                return img;
+                    var bitmap = new BitmapImage();
+                    await bitmap.SetSourceAsync(stream);
+                    return bitmap;
+                }
             }
             catch
             {
@@ -298,25 +303,19 @@ namespace Bili.SignIn.Uwp
             {
                 { Query.AuthCode, _internalQRAuthCode },
                 { Query.LocalId, _guid },
+                { "guid", Guid.NewGuid().ToString() },
             };
 
             try
             {
                 var httpProvider = Locator.Instance.GetService<IHttpProvider>();
-                var request = await httpProvider.GetRequestMessageAsync(HttpMethod.Post, Passport.QRCodeCheck, queryParameters);
+                var request = await httpProvider.GetRequestMessageAsync(HttpMethod.Post, Passport.QRCodeCheck, queryParameters, RequestClientType.Login);
                 var response = await httpProvider.SendAsync(request, _qrPollCancellationTokenSource.Token);
                 var result = await httpProvider.ParseAsync<ServerResponse<TokenInfo>>(response);
 
                 // 保存cookie
                 SaveCookie(result.Data.CookieInfo);
-
-                // 获取确认链接
-                var confirmUrl = await GetCookieToAccessKeyConfirmUrlAsync();
-
-                // 获取新的访问令牌
-                var accessKey = await GetAccessKeyAsync(confirmUrl);
-                result.Data.AccessToken = accessKey;
-
+                SaveAuthorizeResult(result.Data);
                 QRCodeStatusChanged?.Invoke(this, new Tuple<QRCodeStatus, TokenInfo>(QRCodeStatus.Success, result.Data));
             }
             catch (ServiceException se)
@@ -329,7 +328,7 @@ namespace Bili.SignIn.Uwp
                 if (se.Error != null)
                 {
                     QRCodeStatus qrStatus = default;
-                    if (se.Error.Code == 86039)
+                    if (se.Error.Code == 86039 || se.Error.Code == 86090)
                     {
                         qrStatus = QRCodeStatus.NotConfirm;
                     }

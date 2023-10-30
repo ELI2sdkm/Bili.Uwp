@@ -26,6 +26,7 @@
     <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
     <PackageCertificateKeyFile>App_TemporaryKey.pfx</PackageCertificateKeyFile>
     <AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
+    <PackageCertificateThumbprint>C3B9A35BB185E430F381F524A644B2598DDF2500</PackageCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
@@ -1330,7 +1331,7 @@
       <Version>2.8.2-prerelease.220830001</Version>
     </PackageReference>
     <PackageReference Include="Newtonsoft.Json">
-      <Version>13.0.2</Version>
+      <Version>13.0.3</Version>
     </PackageReference>
     <PackageReference Include="Richasy.FluentIcon.Regular.UWP">
       <Version>1.1.150</Version>

@@ -29,7 +29,7 @@ namespace Bili.Lib
         /// <param name="authProvider">授权验证模块.</param>
         public HttpProvider(IAuthorizeProvider authProvider)
         {
-            this._authenticationProvider = authProvider;
+            _authenticationProvider = authProvider;
             InitHttpClient();
         }
 
@@ -38,14 +38,14 @@ namespace Bili.Lib
         {
             get
             {
-                return this._httpClient.Timeout;
+                return HttpClient.Timeout;
             }
 
             set
             {
                 try
                 {
-                    this._httpClient.Timeout = value;
+                    HttpClient.Timeout = value;
                 }
                 catch (InvalidOperationException exception)
                 {
@@ -60,7 +60,7 @@ namespace Bili.Lib
         }
 
         /// <inheritdoc/>
-        public HttpClient HttpClient { get => _httpClient; }
+        public HttpClient HttpClient { get; private set; }
 
         /// <inheritdoc/>
         public async Task<HttpRequestMessage> GetRequestMessageAsync(
@@ -71,7 +71,8 @@ namespace Bili.Lib
             bool needToken = true,
             string additionalQuery = "",
             bool needCookie = false,
-            bool needAppKey = false)
+            bool needAppKey = false,
+            bool forceNoToken = false)
         {
             HttpRequestMessage requestMessage;
 
@@ -94,7 +95,7 @@ namespace Bili.Lib
             }
             else if (method == HttpMethod.Get || method == HttpMethod.Delete)
             {
-                var query = await _authenticationProvider.GenerateAuthorizedQueryStringAsync(queryParams, clientType, needToken);
+                var query = await _authenticationProvider.GenerateAuthorizedQueryStringAsync(queryParams, clientType, needToken, forceNoToken);
                 if (!string.IsNullOrEmpty(additionalQuery))
                 {
                     query += $"&{additionalQuery}";
@@ -149,6 +150,7 @@ namespace Bili.Lib
             requestMessage.Headers.Add(Headers.Envoriment, GRPCConfig.Envorienment);
             requestMessage.Headers.Add(Headers.TransferEncodingKey, Headers.TransferEncodingValue);
             requestMessage.Headers.Add(Headers.TEKey, Headers.TEValue);
+            requestMessage.Headers.Add(Headers.Buvid, GetBuvid());
 
             var messageBytes = grpcMessage.ToByteArray();
 
